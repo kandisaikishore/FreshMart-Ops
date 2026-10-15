@@ -17,26 +17,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Validate required static assets
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate static entry point
         run: |
           set -eu
-          test -f index.html
           test -s index.html
-          test -f styles.css
-          test -s styles.css
-          test -f app.js
-          test -s app.js
-      - name: Validate JavaScript syntax
-        run: node --check app.js
-      - name: Check for broken local asset references
+          grep -qi '<!doctype html' index.html
+          grep -qi 'name="viewport"' index.html
+          grep -qi 'charset="utf-8"' index.html
+      - name: Validate inline JavaScript syntax and local asset references
         run: |
           node <<'NODE'
           const fs = require('fs');
+          const vm = require('vm');
           const html = fs.readFileSync('index.html', 'utf8');
-          const refs = [...html.matchAll(/(?:src|href)=["']([^"'#]+)["']/g)]
-            .map(match => match[1])
+          const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)]
+            .map(m => m[1].trim()).filter(Boolean);
+          scripts.forEach((script, i) => new vm.Script(script, { filename: 'inline-script-' + (i + 1) + '.js' }));
+          const refs = [...html.matchAll(/(?:src|href)=["']([^"'#]+)["']/gi)]
+            .map(m => m[1])
             .filter(value => !/^(?:https?:|data:|mailto:|javascript:|\/\/)/i.test(value));
           const missing = refs.filter(ref => {
             const clean = decodeURIComponent(ref.split('?')[0]);
@@ -46,10 +48,5 @@ jobs:
             console.error('Missing local asset references:', [...new Set(missing)].join(', '));
             process.exit(1);
           }
-          console.log('Local asset references validated.');
+          console.log('Inline JavaScript syntax and local references passed.');
           NODE
-      - name: Basic browser/runtime compatibility metadata
-        run: |
-          grep -qi '<!doctype html' index.html
-          grep -qi 'name="viewport"' index.html
-          grep -qi 'charset="utf-8"' index.html
