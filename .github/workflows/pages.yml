@@ -20,15 +20,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - name: Prepare static site
         run: |
+          set -euo pipefail
           mkdir -p _site
           cp index.html README.md index.md _site/
-          cp -R docs _site/docs
+          if [ -d docs ]; then cp -R docs _site/docs; fi
           touch _site/.nojekyll
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
